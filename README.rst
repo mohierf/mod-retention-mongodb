@@ -4,7 +4,7 @@
 .. _packages/distributed-retention-modules:
 
 ==================================
-MongoDB retention modules 
+MongoDB retention module
 ==================================
 
 The high availability allow the Arbiter to send a configuration to a spare scheduler, but a spare scheduler does not have any saved states for hosts and services. It will have to recheck them all. It's better to use a distributed retention module so spares will have all the information they need to start with an accurate picture of the current states and scheduling :)
@@ -43,9 +43,10 @@ And finally we start MongoDB :
   /etc/init.d/mongodb start
 
   
-Step 2: configure the module (if needed)
+Step 2: configure the module (if needed):
   
 ::
+
    ## Module:      retention-mongodb
    ## Loaded by:   Scheduler
    # Retention file to keep state between process restarts.
@@ -62,6 +63,7 @@ Step 2: configure the module (if needed)
 Step 3: define a mongodb_retention module in your scheduler configuration file:
   
 ::
+
    define scheduler {
       scheduler_name      scheduler-master ; Just the name
 
