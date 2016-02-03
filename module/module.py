@@ -160,13 +160,14 @@ class MongodbRetentionScheduler(BaseModule):
             self.connection = None
         logger.info('[Mongodb-Scheduler-Retention] database connection closed')
 
-    def _get_element(self, elt):
+    def _get_element(self, elt, host, service):
         """
         Convert object to dict
         """
         item = {}
         cls = elt.__class__
-        item['_id'] = '%s-%s' % (elt.id, elt.entry_time)
+        item['host'] = host
+        item['service'] = service
         for prop in cls.properties:
             if hasattr(elt, prop):
                 item[prop] = getattr(elt, prop)
@@ -313,7 +314,6 @@ class MongodbRetentionScheduler(BaseModule):
                 _id = '%s,hostcheck' % host
                 logger.info('[Mongodb-Scheduler-Retention] update host retention: %s.' % host)
                 host_retention = hosts[host]
-                # logger.info('[Mongodb-Scheduler-Retention] Update host retention: %s.' % host_retention)
                 dumped_value = pickle.dumps(host_retention, protocol=pickle.HIGHEST_PROTOCOL)
                 value = base64.b64encode(dumped_value)
                 self.hosts_collection.remove({'_id': _id})
@@ -324,12 +324,12 @@ class MongodbRetentionScheduler(BaseModule):
                 self.hosts_collection.insert(retention_data)
                 if host_retention['downtimes']:
                     for downtime in host_retention['downtimes']:
-                        downtimes.append(('%s,%s' % (_id, downtime.id), self._get_element(downtime)))
-                        logger.info('[Mongodb-Scheduler-Retention]  - host downtime: %s,%s: %s' % (_id, downtime.id, downtime))
+                        downtimes.append(('%s,%s' % (_id, downtime.entry_time), self._get_element(downtime, host, 'hostcheck')))
+                        logger.info('[Mongodb-Scheduler-Retention]  - host downtime: %s,%s: %s' % (_id, downtime.entry_time, downtime))
                 if host_retention['comments']:
                     for comment in host_retention['comments']:
-                        comments.append(('%s,%s' % (_id, comment.id), self._get_element(comment)))
-                        logger.info('[Mongodb-Scheduler-Retention]  - host comment: %s,%s: %s' % (_id, comment.id, comment))
+                        comments.append(('%s,%s' % (_id, comment.entry_time), self._get_element(comment, host, 'hostcheck')))
+                        logger.info('[Mongodb-Scheduler-Retention]  - host comment: %s,%s: %s' % (_id, comment.entry_time, comment))
             logger.info('[Mongodb-Scheduler-Retention] updated hosts retention.')
 
             for (host, service) in services:
@@ -345,12 +345,12 @@ class MongodbRetentionScheduler(BaseModule):
                                   }
                 if service_retention['downtimes']:
                     for downtime in service_retention['downtimes']:
-                        downtimes.append(('%s,%s' % (_id, downtime.id), self._get_element(downtime)))
-                        logger.info('[Mongodb-Scheduler-Retention]  - service downtime: %s,%s: %s' % (_id, downtime.id, downtime))
+                        downtimes.append(('%s,%s' % (_id, downtime.entry_time), self._get_element(downtime, host, service)))
+                        logger.info('[Mongodb-Scheduler-Retention]  - service downtime: %s,%s: %s' % (_id, downtime.entry_time, downtime))
                 if service_retention['comments']:
                     for comment in service_retention['comments']:
-                        comments.append(('%s,%s' % (_id, comment.id), self._get_element(comment)))
-                        logger.info('[Mongodb-Scheduler-Retention]  - service comment: %s,%s: %s' % (_id, comment.id, comment))
+                        comments.append(('%s,%s' % (_id, comment.entry_time), self._get_element(comment, host, service)))
+                        logger.info('[Mongodb-Scheduler-Retention]  - service comment: %s,%s: %s' % (_id, comment.entry_time, comment))
                 self.services_collection.insert(retention_data)
             logger.info('[Mongodb-Scheduler-Retention] updated services retention.')
         except Exception:
@@ -364,22 +364,28 @@ class MongodbRetentionScheduler(BaseModule):
         logger.info('[Mongodb-Scheduler-Retention] update comments/downtimes retention starting ...')
         try:
             for _id, comment in comments:
+                filter = { "host": comment['host'], "service": comment['service'], "entry_time": comment['entry_time'] }
                 try:
-                    self.comments_collection.replace_one({'_id': _id}, comment, upsert=True)
-                    logger.info('[Mongodb-Scheduler-Retention] comment inserted: %s / %s.' % (_id, comment))
-                except DuplicateKeyError:
-                    pass
+                    result = self.comments_collection.replace_one(filter, comment, upsert=True)
+                    if result.upserted_id:
+                        logger.info('[Mongodb-Scheduler-Retention] comment inserted: %s / %s.' % (_id, comment))
+                except Exception:
+                    logger.warn('[Mongodb-Scheduler-Retention] comment update/insert error: %s'
+                                % traceback.format_exc())
 
         except Exception:
             logger.warn('[Mongodb-Scheduler-Retention] comments update error: %s' % traceback.format_exc())
 
         try:
             for _id, downtime in downtimes:
+                filter = { "host": downtime['host'], "service": downtime['service'], "entry_time": downtime['entry_time'] }
                 try:
-                    self.downtimes_collection.replace_one({'_id': _id}, downtime, upsert=True)
-                    logger.info('[Mongodb-Scheduler-Retention] downtime inserted: %s / %s.' % (_id, downtime))
-                except DuplicateKeyError:
-                    pass
+                    result = self.downtimes_collection.replace_one(filter, downtime, upsert=True)
+                    if result.upserted_id:
+                        logger.info('[Mongodb-Scheduler-Retention] downtime inserted: %s / %s.' % (_id, downtime))
+                except Exception:
+                    logger.warn('[Mongodb-Scheduler-Retention] downtime update/insert error: %s'
+                                % traceback.format_exc())
 
         except Exception:
             logger.warn('[Mongodb-Scheduler-Retention] comments update error: %s' % traceback.format_exc())
